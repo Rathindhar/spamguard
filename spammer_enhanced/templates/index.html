@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpamGuard — Industrial ML Spammer Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0c10;
+    --surface:  #111318;
+    --border:   #1e2230;
+    --accent:   #00e5ff;
+    --danger:   #ff1744;
+    --safe:     #00e676;
+    --warn:     #ffab00;
+    --text:     #e0e6f0;
+    --muted:    #5a6480;
+    --glow:     0 0 20px rgba(0,229,255,0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse at 10% 20%, rgba(0,229,255,0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 90% 80%, rgba(255,23,68,0.04) 0%, transparent 50%);
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(17,19,24,0.95);
+    backdrop-filter: blur(10px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo {
+    font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+  .logo span { color: var(--text); }
+  .status-dot {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem; color: var(--muted);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--safe);
+         box-shadow: 0 0 8px var(--safe); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Main layout ─────────────────────────────────────── */
+  main { max-width: 1200px; margin: 0 auto; padding: 40px 24px; }
+
+  /* ── Metrics row ─────────────────────────────────────── */
+  .metrics-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-bottom: 36px;
+  }
+  .metric-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .metric-card:hover { border-color: var(--accent); box-shadow: var(--glow); }
+  .metric-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 1.5px; margin-bottom: 10px;
+  }
+  .metric-value {
+    font-size: 2.1rem; font-weight: 800; color: var(--accent);
+    line-height: 1;
+  }
+  .metric-value.good  { color: var(--safe); }
+  .metric-value.warn  { color: var(--warn); }
+
+  /* ── Two-column layout ───────────────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
+
+  /* ── Panel ───────────────────────────────────────────── */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 28px; position: relative; overflow: hidden;
+  }
+  .panel-title {
+    font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 2px; color: var(--muted); margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel-title::before {
+    content: ""; width: 3px; height: 14px;
+    background: var(--accent); border-radius: 2px; flex-shrink: 0;
+  }
+
+  /* ── Input area ──────────────────────────────────────── */
+  textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88rem; padding: 16px; resize: vertical; min-height: 120px;
+    line-height: 1.6; transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+  }
+  textarea:focus { border-color: var(--accent); box-shadow: var(--glow); }
+
+  .btn {
+    margin-top: 14px; width: 100%;
+    background: var(--accent); color: #000; border: none;
+    border-radius: 8px; padding: 14px; font-family: 'Syne', sans-serif;
+    font-size: 0.95rem; font-weight: 700; cursor: pointer;
+    letter-spacing: 0.5px; transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn:hover  { opacity: 0.88; }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .btn-outline {
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent); margin-top: 10px;
+  }
+
+  /* ── Result box ──────────────────────────────────────── */
+  #result-box {
+    display: none; margin-top: 20px;
+    border-radius: 12px; padding: 24px;
+    border: 1px solid var(--border);
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+  #result-box.spam { border-color: var(--danger); background: rgba(255,23,68,0.06); }
+  #result-box.legit{ border-color: var(--safe);   background: rgba(0,230,118,0.05); }
+
+  .verdict {
+    font-size: 1.6rem; font-weight: 800; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .verdict.spam  { color: var(--danger); }
+  .verdict.legit { color: var(--safe); }
+
+  .prob-bar-wrap { margin: 16px 0 8px; }
+  .prob-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem; color: var(--muted); margin-bottom: 6px;
+  }
+  .prob-bar {
+    height: 8px; border-radius: 4px;
+    background: var(--border); overflow: hidden;
+  }
+  .prob-fill {
+    height: 100%; border-radius: 4px;
+    transition: width 0.6s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .prob-fill.spam  { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+  .prob-fill.legit { background: var(--safe);  box-shadow: 0 0 10px var(--safe);  }
+
+  /* ── Feature pills ───────────────────────────────────── */
+  .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem; padding: 5px 12px; border-radius: 20px;
+    background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.2);
+    color: var(--accent);
+  }
+  .pill.danger { background: rgba(255,23,68,0.1); border-color: rgba(255,23,68,0.3); color: var(--danger); }
+
+  /* ── Batch area ──────────────────────────────────────── */
+  #batch-results { margin-top: 18px; }
+  .batch-item {
+    padding: 12px 16px; border-radius: 8px; margin-bottom: 8px;
+    border-left: 3px solid var(--border); font-size: 0.85rem;
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--bg); transition: border-color 0.2s;
+  }
+  .batch-item.spam  { border-left-color: var(--danger); }
+  .batch-item.legit { border-left-color: var(--safe); }
+  .batch-tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
+    font-weight: 700; flex-shrink: 0; padding: 2px 8px; border-radius: 4px;
+    margin-top: 2px;
+  }
+  .batch-tag.spam  { background: rgba(255,23,68,0.15);  color: var(--danger); }
+  .batch-tag.legit { background: rgba(0,230,118,0.15); color: var(--safe); }
+
+  /* ── Drift panel ─────────────────────────────────────── */
+  .drift-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem; padding: 14px 18px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--border);
+    word-break: break-word;
+  }
+
+  /* ── Loading spinner ─────────────────────────────────── */
+  .spinner {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2px solid rgba(0,229,255,0.3); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Responsive ──────────────────────────────────────── */
+  @media (max-width: 768px) {
+    .metrics-row { grid-template-columns: repeat(2,1fr); }
+    .grid-2      { grid-template-columns: 1fr; }
+    header       { padding: 14px 20px; }
+    main         { padding: 24px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Spam<span>Guard</span></div>
+  <div class="status-dot">
+    <div class="dot"></div>
+    MODEL ACTIVE &nbsp;|&nbsp; Industrial ML Spammer Detection
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Metrics row ────────────────────────────────────── -->
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="metric-label">Accuracy</div>
+      <div class="metric-value good" id="m-acc">
+        {{ "%.1f"|format(metrics.get("Accuracy", 0)) }}%
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Precision</div>
+      <div class="metric-value good" id="m-prec">
+        {{ "%.1f"|format(metrics.get("Precision", 0)) }}%
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Recall</div>
+      <div class="metric-value good" id="m-rec">
+        {{ "%.1f"|format(metrics.get("Recall", 0)) }}%
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">F1-Score</div>
+      <div class="metric-value good" id="m-f1">
+        {{ "%.1f"|format(metrics.get("F1-Score", 0)) }}%
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Main two-column ────────────────────────────────── -->
+  <div class="grid-2">
+
+    <!-- Left: Single message analyser -->
+    <div class="panel">
+      <div class="panel-title">Single Message Analysis</div>
+      <textarea id="msg-input"
+        placeholder="Paste any message here to analyse it...&#10;&#10;e.g. Congratulations! You have won a FREE iPhone! Click here NOW!!!"
+      ></textarea>
+      <button class="btn" id="analyse-btn" onclick="analyseMessage()">
+        Analyse Message
+      </button>
+
+      <!-- Result -->
+      <div id="result-box">
+        <div class="verdict" id="verdict-text"></div>
+        <div class="prob-bar-wrap">
+          <div class="prob-label" id="prob-label-spam">SPAM probability: 0%</div>
+          <div class="prob-bar"><div class="prob-fill spam" id="spam-bar" style="width:0%"></div></div>
+        </div>
+        <div class="prob-bar-wrap">
+          <div class="prob-label" id="prob-label-ham">LEGITIMATE probability: 0%</div>
+          <div class="prob-bar"><div class="prob-fill legit" id="ham-bar" style="width:0%"></div></div>
+        </div>
+        <div style="margin-top:18px">
+          <div class="prob-label">TOP CONTENT SIGNALS</div>
+          <div class="pill-row" id="word-pills"></div>
+        </div>
+        <div style="margin-top:14px">
+          <div class="prob-label">KEY BEHAVIORAL SIGNALS</div>
+          <div class="pill-row" id="behav-pills"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Batch analyser + drift -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+
+      <div class="panel">
+        <div class="panel-title">Batch Analysis</div>
+        <textarea id="batch-input" style="min-height:90px"
+          placeholder="Paste multiple messages — one per line."
+        ></textarea>
+        <button class="btn btn-outline" onclick="batchAnalyse()">
+          Analyse All Messages
+        </button>
+        <div id="batch-results"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Drift Detector</div>
+        <div class="drift-status" id="drift-status">{{ drift }}</div>
+        <p style="margin-top:12px; font-size:0.8rem; color:var(--muted); line-height:1.6">
+          The Page-Hinkley drift detector continuously monitors
+          prediction accuracy. A warning indicates spam patterns
+          have evolved and the model should be retrained.
+        </p>
+      </div>
+
+    </div>
+  </div><!-- /grid-2 -->
+
+  <!-- ── Quick test examples ────────────────────────────── -->
+  <div class="panel">
+    <div class="panel-title">Quick Test Examples</div>
+    <div style="display:flex; flex-wrap:wrap; gap:10px">
+      <button class="pill" style="cursor:pointer;padding:8px 16px"
+        onclick="setExample('Congratulations! You have WON a FREE iPhone! Click here to CLAIM your $1000 prize NOW!!!')">
+        🚨 Spam example 1
+      </button>
+      <button class="pill" style="cursor:pointer;padding:8px 16px"
+        onclick="setExample('URGENT: Your bank account has been SUSPENDED. Call 0800-FREE immediately to restore access.')">
+        🚨 Spam example 2
+      </button>
+      <button class="pill" style="cursor:pointer;padding:8px 16px"
+        onclick="setExample('Hey, are we still meeting for lunch tomorrow at the usual place around noon?')">
+        ✅ Legitimate 1
+      </button>
+      <button class="pill" style="cursor:pointer;padding:8px 16px"
+        onclick="setExample('Please find attached the project report. Let me know if you have any feedback before Friday.')">
+        ✅ Legitimate 2
+      </button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  function setExample(text) {
+    document.getElementById('msg-input').value = text;
+    analyseMessage();
+  }
+
+  async function analyseMessage() {
+    const msg = document.getElementById('msg-input').value.trim();
+    if (!msg) return;
+
+    const btn = document.getElementById('analyse-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>  Analysing...';
+
+    try {
+      const res  = await fetch('/predict', {
+        method : 'POST',
+        headers: {'Content-Type':'application/json'},
+        body   : JSON.stringify({message: msg})
+      });
+      const data = await res.json();
+
+      const box     = document.getElementById('result-box');
+      const verdict = document.getElementById('verdict-text');
+      const isSpam  = data.prediction === 'SPAM';
+
+      box.style.display = 'block';
+      box.className      = isSpam ? 'spam' : 'legit';
+      verdict.className  = isSpam ? 'verdict spam' : 'verdict legit';
+      verdict.innerHTML  = isSpam
+        ? `🚨 SPAMMER DETECTED`
+        : `✅ LEGITIMATE USER`;
+
+      document.getElementById('prob-label-spam').textContent =
+        `SPAM probability: ${data.spam_prob}%`;
+      document.getElementById('prob-label-ham').textContent =
+        `LEGITIMATE probability: ${data.ham_prob}%`;
+
+      setTimeout(() => {
+        document.getElementById('spam-bar').style.width  = data.spam_prob + '%';
+        document.getElementById('ham-bar').style.width   = data.ham_prob  + '%';
+      }, 50);
+
+      // Word pills
+      const wp = document.getElementById('word-pills');
+      wp.innerHTML = data.top_words.slice(0,8).map(([w]) =>
+        `<span class="pill ${isSpam?'danger':''}">${w}</span>`
+      ).join('');
+
+      // Behavioral pills
+      const bp = document.getElementById('behav-pills');
+      bp.innerHTML = data.top_behaviors.slice(0,6).map(([k,v]) =>
+        `<span class="pill ${isSpam?'danger':''}">${k.replace(/_/g,' ')}: ${v}</span>`
+      ).join('');
+
+      // Update drift
+      document.getElementById('drift-status').textContent = data.drift_status;
+
+    } catch(e) {
+      alert('Error: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Analyse Message';
+    }
+  }
+
+  async function batchAnalyse() {
+    const raw  = document.getElementById('batch-input').value.trim();
+    if (!raw) return;
+    const msgs = raw.split('\n').filter(m => m.trim());
+    if (!msgs.length) return;
+
+    const res  = await fetch('/batch', {
+      method : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body   : JSON.stringify({messages: msgs})
+    });
+    const data = await res.json();
+
+    const container = document.getElementById('batch-results');
+    const summary   = `
+      <div style="display:flex;gap:16px;margin-bottom:14px;margin-top:16px">
+        <span class="pill danger">🚨 Spam: ${data.spam}</span>
+        <span class="pill">✅ Legit: ${data.legitimate}</span>
+        <span class="pill">Total: ${data.total}</span>
+      </div>`;
+    const items = data.results.map(r => `
+      <div class="batch-item ${r.prediction==='SPAM'?'spam':'legit'}">
+        <span class="batch-tag ${r.prediction==='SPAM'?'spam':'legit'}">
+          ${r.prediction==='SPAM'?'SPAM':'HAM'}
+        </span>
+        <span style="color:var(--text);font-size:0.83rem;line-height:1.5">
+          ${r.message.substring(0,120)}${r.message.length>120?'...':''}
+          <span style="color:var(--muted);font-size:0.72rem;margin-left:8px">
+            (${r.spam_prob}% spam)
+          </span>
+        </span>
+      </div>`).join('');
+    container.innerHTML = summary + items;
+  }
+
+  // Allow Ctrl+Enter to submit
+  document.getElementById('msg-input').addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === 'Enter') analyseMessage();
+  });
+</script>
+</body>
+</html>
